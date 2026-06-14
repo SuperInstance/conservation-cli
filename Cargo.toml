@@ -1,0 +1,16 @@
+[package]
+name = "si-conservation"
+version = "0.1.0"
+edition = "2021"
+authors = ["SuperInstance"]
+description = "Unified conservation law benchmark suite — γ + η = C across 9 languages"
+license = "MIT"
+
+[[bin]]
+name = "si-conservation"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+rayon = "1"
+	
