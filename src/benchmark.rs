@@ -3,9 +3,14 @@
 //! Shells out to every language implementation of the conservation law
 //! and collects timing data into a unified comparison table.
 
+use std::io::Read;
 use std::path::PathBuf;
-use std::process::Command;
-use std::time::Instant;
+use std::process::{Command, Stdio};
+use std::thread::sleep;
+use std::time::{Duration, Instant};
+
+/// Maximum wall-clock time allowed for any single external benchmark.
+const BENCH_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// A single benchmark result row.
 #[derive(Debug, Clone)]
@@ -53,20 +58,60 @@ impl BenchResult {
 /// Run a command with a timeout and capture output.
 fn run_timed(language: &'static str, binary: &str, mut cmd: Command) -> BenchResult {
     let start = Instant::now();
-    let output = cmd.output();
-    let elapsed = start.elapsed().as_millis();
 
-    match output {
-        Ok(out) => {
-            if out.status.success() {
-                let stdout = String::from_utf8_lossy(&out.stdout);
-                BenchResult::ok(language, binary, elapsed, &stdout)
-            } else {
-                let stderr = String::from_utf8_lossy(&out.stderr);
-                BenchResult::fail(language, binary, elapsed, &stderr)
+    let mut child = match cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn() {
+        Ok(child) => child,
+        Err(e) => {
+            return BenchResult::fail(
+                language,
+                binary,
+                start.elapsed().as_millis(),
+                &e.to_string(),
+            );
+        }
+    };
+
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let elapsed = start.elapsed().as_millis();
+                let mut stdout = String::new();
+                let mut stderr = String::new();
+                if let Some(mut out) = child.stdout.take() {
+                    let _ = out.read_to_string(&mut stdout);
+                }
+                if let Some(mut err) = child.stderr.take() {
+                    let _ = err.read_to_string(&mut stderr);
+                }
+                if status.success() {
+                    return BenchResult::ok(language, binary, elapsed, &stdout);
+                } else {
+                    return BenchResult::fail(language, binary, elapsed, &stderr);
+                }
+            }
+            Ok(None) => {
+                if start.elapsed() >= BENCH_TIMEOUT {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return BenchResult::fail(
+                        language,
+                        binary,
+                        BENCH_TIMEOUT.as_millis(),
+                        "benchmark timed out after 30s",
+                    );
+                }
+                sleep(Duration::from_millis(10));
+            }
+            Err(e) => {
+                let _ = child.kill();
+                return BenchResult::fail(
+                    language,
+                    binary,
+                    start.elapsed().as_millis(),
+                    &e.to_string(),
+                );
             }
         }
-        Err(e) => BenchResult::fail(language, binary, elapsed, &e.to_string()),
     }
 }
 
@@ -249,8 +294,6 @@ pub fn print_table(results: &[BenchResult]) {
     println!();
     println!("📊 Speed Ranking (fastest first):");
     for (i, r) in sorted.iter().enumerate() {
-        let bar_len = 30usize.min(sorted[0].elapsed_ms.max(1) as usize);
-        let _ = bar_len;
         let ratio = if r.elapsed_ms > 0 {
             r.elapsed_ms as f64 / sorted[0].elapsed_ms.max(1) as f64
         } else {
@@ -264,5 +307,45 @@ pub fn print_table(results: &[BenchResult]) {
             r.elapsed_ms,
             bar
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn run_timed_success_captures_stdout() {
+        let mut cmd = Command::new("echo");
+        cmd.arg("hello world");
+        let r = run_timed("Echo", "echo hello", cmd);
+        assert_eq!(
+            r.exit_code, 0,
+            "expected success, got: {}",
+            r.output_preview
+        );
+        assert!(
+            r.output_preview.contains("hello world"),
+            "stdout preview missing output: {}",
+            r.output_preview
+        );
+    }
+
+    #[test]
+    fn run_timed_failure_for_missing_binary() {
+        let cmd = Command::new("/definitely/does/not/exist/conservation");
+        let r = run_timed("Missing", "/definitely/does/not/exist/conservation", cmd);
+        assert_ne!(r.exit_code, 0, "expected failure for missing binary");
+        assert!(
+            !r.output_preview.is_empty(),
+            "error preview should contain spawn error"
+        );
+    }
+
+    #[test]
+    fn run_timed_failure_for_nonzero_exit() {
+        let cmd = Command::new("false");
+        let r = run_timed("False", "false", cmd);
+        assert_ne!(r.exit_code, 0, "expected failure for `false`");
     }
 }
