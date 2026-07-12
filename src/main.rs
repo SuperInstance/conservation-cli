@@ -8,8 +8,8 @@ mod conservation;
 
 use clap::{Parser, Subcommand};
 use conservation::{
-    conservation_identity, delta, efficiency, fleet_cancellation, haar_decompose,
-    monte_carlo, shannon_entropy, Xorshift128Plus,
+    conservation_identity, delta, efficiency, fleet_cancellation, haar_decompose, monte_carlo,
+    shannon_entropy, Xorshift128Plus,
 };
 
 #[derive(Parser)]
@@ -88,7 +88,10 @@ fn cmd_bench() {
 
     let total = results.len();
     let passed = results.iter().filter(|r| r.exit_code == 0).count();
-    println!("\n📈 {} / {} implementations completed successfully.", passed, total);
+    println!(
+        "\n📈 {} / {} implementations completed successfully.",
+        passed, total
+    );
 }
 
 fn cmd_theory() {
@@ -97,7 +100,10 @@ fn cmd_theory() {
     println!("║   Conservation Law — Theoretical Predictions: δ, η, C           ║");
     println!("║   δ(n) = (1/√n)(1 − 3/(2n))    efficiency = 1 − δ(n)           ║");
     println!("╠══════════════════════════════════════════════════════════════════╣");
-    println!("║ {:>10} │ {:>12} │ {:>12} │ {:>12} │", "n", "δ(n)", "efficiency", "1−eff");
+    println!(
+        "║ {:>10} │ {:>12} │ {:>12} │ {:>12} │",
+        "n", "δ(n)", "efficiency", "1−eff"
+    );
     println!("╟────────────┼──────────────┼──────────────┼──────────────╢");
 
     let sizes: &[usize] = &[
@@ -127,7 +133,10 @@ fn cmd_prove(trials: usize) {
     println!();
     println!("╔══════════════════════════════════════════════════════════════════════╗");
     println!("║   Conservation Identity Verification: γ + η = C (Monte Carlo)        ║");
-    println!("║   Trials per fleet size: {:<5}                                        ║", format!("{}", trials));
+    println!(
+        "║   Trials per fleet size: {:<5}                                        ║",
+        format!("{}", trials)
+    );
     println!("╠══════════════════════════════════════════════════════════════════════╣");
     println!(
         "║ {:>8} │ {:>10} │ {:>10} │ {:>10} │ {:>10} │ {:>8} │",
@@ -191,7 +200,13 @@ fn cmd_shannon(n: usize, seed: u64) {
     // Count distribution
     let mut counts = [0u64; 3];
     for &s in &signals {
-        let idx = if s < 0 { 0 } else if s == 0 { 1 } else { 2 };
+        let idx = if s < 0 {
+            0
+        } else if s == 0 {
+            1
+        } else {
+            2
+        };
         counts[idx] += 1;
     }
 
@@ -203,15 +218,33 @@ fn cmd_shannon(n: usize, seed: u64) {
     println!("║  Seed:          {}", seed);
     println!("║");
     println!("║  Symbol distribution:");
-    println!("║    −1: {:>8} ({:.2}%)", counts[0], counts[0] as f64 / n as f64 * 100.0);
-    println!("║     0: {:>8} ({:.2}%)", counts[1], counts[1] as f64 / n as f64 * 100.0);
-    println!("║    +1: {:>8} ({:.2}%)", counts[2], counts[2] as f64 / n as f64 * 100.0);
+    println!(
+        "║    −1: {:>8} ({:.2}%)",
+        counts[0],
+        counts[0] as f64 / n as f64 * 100.0
+    );
+    println!(
+        "║     0: {:>8} ({:.2}%)",
+        counts[1],
+        counts[1] as f64 / n as f64 * 100.0
+    );
+    println!(
+        "║    +1: {:>8} ({:.2}%)",
+        counts[2],
+        counts[2] as f64 / n as f64 * 100.0
+    );
     println!("║");
     println!("║  H(X) = {:.6} bits", h);
     println!("║  H_max = log₂(3) = {:.6} bits", conservation::LOG2_3);
-    println!("║  Efficiency = H/H_max = {:.4}%", h / conservation::LOG2_3 * 100.0);
+    println!(
+        "║  Efficiency = H/H_max = {:.4}%",
+        h / conservation::LOG2_3 * 100.0
+    );
     println!("║");
-    println!("║  Fleet cancellation = {:.6}", fleet_cancellation(&signals));
+    println!(
+        "║  Fleet cancellation = {:.6}",
+        fleet_cancellation(&signals)
+    );
     println!("╚══════════════════════════════════════════════════╝");
 }
 
@@ -236,12 +269,21 @@ fn cmd_haar(n: usize, seed: u64) {
         } else {
             "".to_string()
         };
-        let sign = if s > 0 { "+" } else if s < 0 { "-" } else { " " };
+        let sign = if s > 0 {
+            "+"
+        } else if s < 0 {
+            "-"
+        } else {
+            " "
+        };
         println!("    [{:>2}] {}{:>3} {}", i, sign, s, bar);
     }
 
     println!();
-    println!("  Approximation coefficients (low-pass, n/2 = {}):", approx.len());
+    println!(
+        "  Approximation coefficients (low-pass, n/2 = {}):",
+        approx.len()
+    );
     for (i, &a) in approx.iter().take(8).enumerate() {
         let bar_len = ((a.abs() * 10.0).round() as usize).min(30);
         let bar = "▓".repeat(bar_len);
@@ -268,8 +310,14 @@ fn cmd_haar(n: usize, seed: u64) {
     println!("    Signal energy:    {:>10.4}", energy_signal);
     println!("    Approx energy:    {:>10.4}", energy_approx);
     println!("    Detail energy:    {:>10.4}", energy_detail);
-    println!("    A + D:            {:>10.4}", energy_approx + energy_detail);
-    println!("    Conservation:     {:.6}", (energy_approx + energy_detail) / energy_signal.max(1e-10));
+    println!(
+        "    A + D:            {:>10.4}",
+        energy_approx + energy_detail
+    );
+    println!(
+        "    Conservation:     {:.6}",
+        (energy_approx + energy_detail) / energy_signal.max(1e-10)
+    );
     println!();
     println!("  📌 Haar decomposition preserves energy: E_approx + E_detail = E_signal.");
 }

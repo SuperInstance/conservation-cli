@@ -135,11 +135,7 @@ pub fn run_all_external() -> Vec<BenchResult> {
         let (_, path) = &paths[4];
         let mut cmd = Command::new("julia");
         cmd.arg(path);
-        results.push(run_timed(
-            "Julia",
-            "julia conservation.jl",
-            cmd,
-        ));
+        results.push(run_timed("Julia", "julia conservation.jl", cmd));
     }
 
     // Octave
@@ -159,11 +155,7 @@ pub fn run_all_external() -> Vec<BenchResult> {
         let (_, path) = &paths[6];
         let mut cmd = Command::new("Rscript");
         cmd.arg(path);
-        results.push(run_timed(
-            "R",
-            "Rscript conservation_law.R",
-            cmd,
-        ));
+        results.push(run_timed("R", "Rscript conservation_law.R", cmd));
     }
 
     // Elixir
@@ -171,11 +163,7 @@ pub fn run_all_external() -> Vec<BenchResult> {
         let (_, path) = &paths[7];
         let mut cmd = Command::new("mix");
         cmd.arg("run").arg("bench/runner.exs").current_dir(path);
-        results.push(run_timed(
-            "Elixir",
-            "mix run bench/runner.exs",
-            cmd,
-        ));
+        results.push(run_timed("Elixir", "mix run bench/runner.exs", cmd));
     }
 
     // Rust (internal)
@@ -224,11 +212,21 @@ pub fn print_table(results: &[BenchResult]) {
     println!("╔══════════════════════════════════════════════════════════════════════╗");
     println!("║     SuperInstance Conservation Law — Multi-Language Benchmark        ║");
     println!("╠══════════════════════════════════════════════════════════════════════╣");
-    println!("║ {:<10} {:<8} {:<12} {:<40} ║", "Language", "Status", "Time (ms)", "Details");
+    println!(
+        "║ {:<10} {:<8} {:<12} {:<40} ║",
+        "Language", "Status", "Time (ms)", "Details"
+    );
     println!("╟──────────────────────────────────────────────────────────────────────╢");
 
     for r in results {
-        let details: String = r.output_preview.lines().next().unwrap_or("").chars().take(38).collect();
+        let details: String = r
+            .output_preview
+            .lines()
+            .next()
+            .unwrap_or("")
+            .chars()
+            .take(38)
+            .collect();
         println!(
             "║ {:<10} {:<8} {:<12} {:<40} ║",
             r.language,
@@ -245,10 +243,7 @@ pub fn print_table(results: &[BenchResult]) {
     println!("╚══════════════════════════════════════════════════════════════════════╝");
 
     // Speed ranking
-    let mut sorted: Vec<&BenchResult> = results
-        .iter()
-        .filter(|r| r.exit_code == 0)
-        .collect();
+    let mut sorted: Vec<&BenchResult> = results.iter().filter(|r| r.exit_code == 0).collect();
     sorted.sort_by_key(|r| r.elapsed_ms);
 
     println!();
