@@ -255,11 +255,15 @@ pub fn haar_decompose(signal: &[i8]) -> (Vec<f64>, Vec<f64>) {
 ///
 /// By the chain rule of information theory: γ + η = C, always.
 ///
-/// Returns `(gamma, eta, c)`.
-pub fn conservation_identity(x: &[i8], g: &[i8]) -> (f64, f64, f64) {
-    let n = x.len().min(g.len());
+/// Returns `Ok((gamma, eta, c))` when the inputs have matching lengths.
+/// Mismatched lengths are rejected rather than silently truncated.
+pub fn conservation_identity(x: &[i8], g: &[i8]) -> Result<(f64, f64, f64), &'static str> {
+    if x.len() != g.len() {
+        return Err("signal and guide must have the same length");
+    }
+    let n = x.len();
     if n == 0 {
-        return (0.0, 0.0, 0.0);
+        return Ok((0.0, 0.0, 0.0));
     }
 
     // H(x) — total entropy
@@ -290,7 +294,7 @@ pub fn conservation_identity(x: &[i8], g: &[i8]) -> (f64, f64, f64) {
     // C = H(x)
     let c = h_x;
 
-    (gamma, eta, c)
+    Ok((gamma, eta, c))
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -368,7 +372,7 @@ mod tests {
     fn test_conservation_identity_holds() {
         let x = [1i8, -1, 0, 1, -1, 0, 1, -1, 0, 1];
         let g = [1i8, 1, 0, 1, -1, 0, 1, -1, 0, 1];
-        let (gamma, eta, c) = conservation_identity(&x, &g);
+        let (gamma, eta, c) = conservation_identity(&x, &g).unwrap();
         assert!(
             ((gamma + eta) - c).abs() < 1e-9,
             "γ + η = C: {} + {} = {} vs C = {}",
@@ -377,6 +381,24 @@ mod tests {
             gamma + eta,
             c
         );
+    }
+
+    #[test]
+    fn test_conservation_identity_rejects_mismatched_lengths() {
+        let x = [1i8, -1, 0];
+        let g = [1i8, -1];
+        assert!(
+            conservation_identity(&x, &g).is_err(),
+            "mismatched lengths must be rejected, not truncated"
+        );
+    }
+
+    #[test]
+    fn test_conservation_identity_empty() {
+        let x: &[i8] = &[];
+        let g: &[i8] = &[];
+        let (gamma, eta, c) = conservation_identity(x, g).unwrap();
+        assert_eq!((gamma, eta, c), (0.0, 0.0, 0.0));
     }
 
     #[test]

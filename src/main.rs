@@ -166,7 +166,10 @@ fn cmd_prove(trials: usize) {
             })
             .collect();
 
-        let (gamma, eta, c) = conservation_identity(&x, &g);
+        let (gamma, eta, c) = conservation_identity(&x, &g).unwrap_or_else(|e| {
+            eprintln!("Error computing conservation identity for n={}: {}", n, e);
+            std::process::exit(1);
+        });
         let sum = gamma + eta;
         let err = ((sum - c).abs() / c.max(1e-10)) * 100.0;
 

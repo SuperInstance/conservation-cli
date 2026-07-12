@@ -234,7 +234,8 @@ fn run_rust_internal() -> BenchResult {
     let n = 10_000;
     let x: Vec<i8> = (0..n).map(|_| rng.ternary()).collect();
     let g: Vec<i8> = (0..n).map(|_| rng.ternary()).collect();
-    let (gamma, eta, c) = conservation::conservation_identity(&x, &g);
+    let (gamma, eta, c) =
+        conservation::conservation_identity(&x, &g).expect("equal-length vectors");
 
     let elapsed = start.elapsed().as_millis();
 
