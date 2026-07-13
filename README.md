@@ -25,7 +25,9 @@ $ si-conservation prove
    This is the Shannon chain rule: H(X) = I(X;G) + H(X|G).
 ```
 
-Eight fleet sizes. Five thousand Monte Carlo trials each. The error column reads `0.0000%` all the way down. Not once, not by luck — every single time, from 5 agents to 10,000, the mutual information plus the conditional entropy equals the total entropy. The discrepancy is measured in parts per billion.
+Eight fleet sizes. The error column reads `0.0000%` all the way down — not by luck, but because the table is a direct evaluation of the Shannon chain rule `H(X) = I(X;G) + H(X|G)` at each fleet size. The identity is exact; the discrepancy is floating-point round-off, measured in parts per billion.
+
+The `--trials` argument controls a side Monte Carlo fleet-cancellation simulation that is also executed at each fleet size (default 5000). That simulation's result is not shown in the table; it exercises the same RNG and parallelism paths used by the benchmark harness.
 
 This is `si-conservation`: a Rust CLI that proves a theorem. Not metaphorically. It runs the math, shows its work, and the answer is the same every time.
 
@@ -44,8 +46,16 @@ $ si-conservation theory
 
 ║          n │         δ(n) │   efficiency │        1−eff │
 ║          5 │     0.313050 │     0.686950 │     0.313050 │
+║         10 │     0.268794 │     0.731206 │     0.268794 │
+║         50 │     0.137179 │     0.862821 │     0.137179 │
 ║        100 │     0.098500 │     0.901500 │     0.098500 │
+║        500 │     0.044587 │     0.955413 │     0.044587 │
+║       1000 │     0.031575 │     0.968425 │     0.031575 │
+║       5000 │     0.014138 │     0.985862 │     0.014138 │
 ║      10000 │     0.009999 │     0.990001 │     0.009999 │
+║      50000 │     0.004472 │     0.995528 │     0.004472 │
+║     100000 │     0.003162 │     0.996838 │     0.003162 │
+║     500000 │     0.001414 │     0.998586 │     0.001414 │
 ║    1000000 │     0.001000 │     0.999000 │     0.001000 │
 ```
 
@@ -57,7 +67,9 @@ A prediction is a formula on paper. `prove` runs the experiment.
 
 It generates random ternary signals, pairs them with partially correlated guides, and computes γ (mutual information), η (conditional entropy), and C (total entropy). Then it checks: does γ + η = C?
 
-It always does. Not because the tool is rigged, but because this is what information *is*. The Shannon chain rule — H(X) = I(X;G) + H(X|G) — is an identity, true the way 2+2=4 is true. The tool proves it by arithmetic, 5,000 times, at eight scales, and lets you watch.
+It always does. Not because the tool is rigged, but because this is what information *is*. The Shannon chain rule — H(X) = I(X;G) + H(X|G) — is an identity, true the way 2+2=4 is true. The tool evaluates the identity directly at eight scales and lets you watch.
+
+> **Note:** `conservation_identity()` now returns `Result<(f64, f64, f64), &'static str>` and rejects signal/guide pairs of mismatched length rather than silently truncating.
 
 ### `bench` — The Contest
 
@@ -152,7 +164,7 @@ This isn't coincidence. It's a theorem. And like all good theorems, it connects 
 cargo install si-conservation
 ```
 
-This installs a theorem prover, a benchmark suite, and an information theory textbook. All in one binary. ~3 MB, zero warnings, forty-eight milliseconds to prove the conservation law.
+This installs a theorem prover, a benchmark suite, and an information theory textbook. All in one binary. ~3 MB, zero warnings enforced by CI, and ~48 ms for the internal Rust benchmark in `bench`.
 
 ### From source
 
@@ -195,7 +207,8 @@ si-conservation theory
 # Run all nine language benchmarks
 si-conservation bench
 
-# Compute Shannon entropy of n ternary signals
+# Compute Shannon entropy of n ternary signals (defaults: -n 10000 -s 42)
+si-conservation shannon
 si-conservation shannon -n 50000 -s 137
 
 # Haar wavelet decomposition on a ternary signal
@@ -215,9 +228,11 @@ si-conservation/
     └── benchmark.rs    # Multi-language harness
 ```
 
-Core functions in `conservation.rs`: `delta(n)`, `efficiency(n)`, `monte_carlo()`, `shannon_entropy()`, `haar_decompose()`, `conservation_identity()`. Each unit-tested against known values. PRNG is `Xorshift128+`, seeded per-thread for lock-free `rayon` parallelism.
+Core functions in `conservation.rs`: `delta(n)`, `efficiency(n)`, `monte_carlo()`, `shannon_entropy()`, `haar_decompose()`, and `conservation_identity()` (returns `Result` and rejects mismatched input lengths). Each is unit-tested against known values, including edge cases for empty inputs and failure paths. PRNG is `Xorshift128+`, seeded per-thread for lock-free `rayon` parallelism; the ternary output is partitioned into three as-equal-as-possible buckets.
 
-The benchmark module shells out to each implementation and formats results. No plotting, no persistence, no dashboard. Just tables on stdout — because that's where truth lives.
+The benchmark module shells out to each implementation with a 30-second wall-clock timeout and formats results. No plotting, no persistence, no dashboard. Just tables on stdout — because that's where truth lives.
+
+A GitHub Actions workflow in `.github/workflows/ci.yml` runs `cargo build --release`, `cargo test`, `cargo fmt --check`, and `cargo clippy --all-targets -- -D warnings` on every push and PR.
 
 ---
 

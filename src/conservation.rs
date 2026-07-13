@@ -67,10 +67,13 @@ impl Xorshift128Plus {
     #[inline(always)]
     pub fn ternary(&mut self) -> i8 {
         let r = self.next_u64();
-        // UINT64_MAX / 3 ≈ 6148914691236517206
-        if r < 6_148_914_691_236_517_206 {
+        // Split the 2^64 range into three as-equal-as-possible buckets.
+        // u64::MAX / 3 = 6_148_914_691_236_517_205; the residual 1 value
+        // lands in the +1 bucket, giving a bias of < 2^-64.
+        const THIRD: u64 = u64::MAX / 3;
+        if r < THIRD {
             -1
-        } else if r < 12_297_829_382_473_034_413 {
+        } else if r < 2 * THIRD {
             0
         } else {
             1
@@ -139,11 +142,12 @@ pub fn monte_carlo(n_agents: usize, n_trials: usize) -> f64 {
         .into_par_iter()
         .map(|thread_id| {
             let mut rng = Xorshift128Plus::new(
-                (thread_id as u64).wrapping_mul(0xDEAD_BEEF_CAFE_BABE).wrapping_add(42),
+                (thread_id as u64)
+                    .wrapping_mul(0xDEAD_BEEF_CAFE_BABE)
+                    .wrapping_add(42),
             );
-            let trials_this_thread = chunk_size.min(
-                n_trials.saturating_sub(thread_id * chunk_size),
-            );
+            let trials_this_thread =
+                chunk_size.min(n_trials.saturating_sub(thread_id * chunk_size));
             let mut local_sum = 0.0f64;
             let mut buf = vec![0i8; n_agents];
 
@@ -181,7 +185,13 @@ pub fn shannon_entropy(signals: &[i8]) -> f64 {
     let mut counts = [0u64; 3]; // [-1, 0, +1]
 
     for &s in signals {
-        let idx = if s < 0 { 0 } else if s == 0 { 1 } else { 2 };
+        let idx = if s < 0 {
+            0
+        } else if s == 0 {
+            1
+        } else {
+            2
+        };
         counts[idx] += 1;
     }
 
@@ -224,11 +234,7 @@ pub fn haar_decompose(signal: &[i8]) -> (Vec<f64>, Vec<f64>) {
 
     for pair in signal.chunks(2) {
         let a = pair[0] as f64;
-        let b = if pair.len() > 1 {
-            pair[1] as f64
-        } else {
-            0.0
-        };
+        let b = if pair.len() > 1 { pair[1] as f64 } else { 0.0 };
         approx.push(inv_sqrt2 * (a + b));
         detail.push(inv_sqrt2 * (a - b));
     }
@@ -249,11 +255,15 @@ pub fn haar_decompose(signal: &[i8]) -> (Vec<f64>, Vec<f64>) {
 ///
 /// By the chain rule of information theory: γ + η = C, always.
 ///
-/// Returns `(gamma, eta, c)`.
-pub fn conservation_identity(x: &[i8], g: &[i8]) -> (f64, f64, f64) {
-    let n = x.len().min(g.len());
+/// Returns `Ok((gamma, eta, c))` when the inputs have matching lengths.
+/// Mismatched lengths are rejected rather than silently truncated.
+pub fn conservation_identity(x: &[i8], g: &[i8]) -> Result<(f64, f64, f64), &'static str> {
+    if x.len() != g.len() {
+        return Err("signal and guide must have the same length");
+    }
+    let n = x.len();
     if n == 0 {
-        return (0.0, 0.0, 0.0);
+        return Ok((0.0, 0.0, 0.0));
     }
 
     // H(x) — total entropy
@@ -284,7 +294,7 @@ pub fn conservation_identity(x: &[i8], g: &[i8]) -> (f64, f64, f64) {
     // C = H(x)
     let c = h_x;
 
-    (gamma, eta, c)
+    Ok((gamma, eta, c))
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -362,7 +372,7 @@ mod tests {
     fn test_conservation_identity_holds() {
         let x = [1i8, -1, 0, 1, -1, 0, 1, -1, 0, 1];
         let g = [1i8, 1, 0, 1, -1, 0, 1, -1, 0, 1];
-        let (gamma, eta, c) = conservation_identity(&x, &g);
+        let (gamma, eta, c) = conservation_identity(&x, &g).unwrap();
         assert!(
             ((gamma + eta) - c).abs() < 1e-9,
             "γ + η = C: {} + {} = {} vs C = {}",
@@ -374,11 +384,52 @@ mod tests {
     }
 
     #[test]
+    fn test_conservation_identity_rejects_mismatched_lengths() {
+        let x = [1i8, -1, 0];
+        let g = [1i8, -1];
+        assert!(
+            conservation_identity(&x, &g).is_err(),
+            "mismatched lengths must be rejected, not truncated"
+        );
+    }
+
+    #[test]
+    fn test_conservation_identity_empty() {
+        let x: &[i8] = &[];
+        let g: &[i8] = &[];
+        let (gamma, eta, c) = conservation_identity(x, g).unwrap();
+        assert_eq!((gamma, eta, c), (0.0, 0.0, 0.0));
+    }
+
+    #[test]
     fn test_xorshift_terminates() {
         let mut rng = Xorshift128Plus::new(42);
         for _ in 0..1000 {
             let v = rng.ternary();
-            assert!(v >= -1 && v <= 1);
+            assert!((-1..=1).contains(&v));
+        }
+    }
+
+    #[test]
+    fn test_ternary_distribution_uniform() {
+        let mut rng = Xorshift128Plus::new(42);
+        let mut counts = [0u64; 3];
+        const N: u64 = 1_000_000;
+        for _ in 0..N {
+            let v = rng.ternary();
+            let idx = (v + 1) as usize;
+            counts[idx] += 1;
+        }
+        let expected = N as f64 / 3.0;
+        for (label, &c) in [(-1, &counts[0]), (0, &counts[1]), (1, &counts[2])] {
+            let deviation = (c as f64 - expected).abs() / expected;
+            assert!(
+                deviation < 0.01,
+                "symbol {} deviated {:.4}% from uniform (count {})",
+                label,
+                deviation * 100.0,
+                c
+            );
         }
     }
 }
